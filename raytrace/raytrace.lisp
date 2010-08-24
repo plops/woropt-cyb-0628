@@ -9,52 +9,53 @@
 
 
 (defpackage :raytrace
-#+nil  (:shadowing-import-from :cl close get special)
-(:export #:quadratic-roots
-	 #:ray-sphere-intersection-length
-	 #:direction
-	 #:ray-spheres-intersection
-	 #:sphere
-	 #:center
-	 #:radius
-	 #:make-sphere
-	 #:sphere-center
-	 #:sphere-radius)
-(:use :cl #+nil :gl #+nil :glut :vector :simplex-anneal))
+  (:use :cl :vector :simplex-anneal)
+  (:export #:quadratic-roots
+	   #:ray-sphere-intersection-length
+	   #:direction
+	   #:ray-spheres-intersection
+	   #:sphere
+	   #:center
+	   #:radius
+	   #:make-sphere
+	   #:sphere-center
+	   #:sphere-radius
+	   #:ray-lost
+	   #:no-solution))
 
 (in-package :raytrace)
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
 
-(declaim (ftype (function (double-float double-float double-float)
-			  (values (or null double-float) 
-				  &optional double-float))
-		quadratic-roots))
+(define-condition ray-lost () ())
+(define-condition no-solution () ())
+
 (defun quadratic-roots (a b c)
   "Find the two roots of ax^2+bx+c=0 and return them as multiple
-  values."
+  values. If no root exists the signal NO-SOLUTION is emitted."
+  (declare (double-float a b c)
+	   (values double-float &optional double-float))
   ;; see numerical recipes sec 5.6, p. 251 on how to avoid roundoff
   ;; error
   (let ((det2 (- (* b b) (* 4 a c))))
-    #+nil (let ((tiny 1d-12))
-      (when (or (< (abs a) tiny)
-		(< (abs c) tiny) 
-		(< (abs b) tiny))
-       ;; i get division by zero when centered sphere
-	;; note: I didn't implement all the corner cases I think
-       (return-from quadratic-roots nil #+nil (values 0d0 0d0))))
-    (when (<= 0d0 det2) ;; we don't want complex results
-      (let* ((pdet2 det2)
-	     (q (* .5d0 (+ b (* (signum b) (sqrt pdet2)))))
-	     (x1 (/ q a))
-	     (x2 (/ c q)))
-	(declare ((double-float 0d0) pdet2)) ;; its positive
-	(values x1 x2)))))
+    (unless (< 0d0 det2)
+      (signal 'no-solution))
+    (let* ((q (* .5d0 (+ b (* (signum b) (sqrt det2)))))
+	   (aa (abs a))
+	   (aq (abs q)))
+      (cond ((and (< aq 1d-12) (< aa 1d-12)) (signal 'no-solution))
+	    ((< aq 1d-12) (/ q a))
+	    ((< aa 1d-12) (/ c q))
+	    (t (values (/ q a) (/ c q)))))))
 
-#+nil 
+#+nil ;; two different solutions
 (quadratic-roots 1d0 2d0 -3d0)
-#+nil
-(quadratic-roots 0d0 -0d0 0d0)
+#+nil ;; one solution
+(quadratic-roots 1d0 0d0 -2d0)
+#+nil ;; undefined result
+(handler-case 
+    (quadratic-roots 0d0 0d0 1d0)
+  (no-solution () 'no))
 
 (declaim (ftype (function (vec vec vec double-float)
 			  (values (or null double-float) &optional))
