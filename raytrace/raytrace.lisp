@@ -1,15 +1,46 @@
+#.(progn
+    (require :asdf)
+    (require :vector)
+#+nil    (require :simple-gl)
+    (require :simplex-anneal))
+
+;; for i in `cat raytrace.lisp|grep defun|grep -v '^;'|cut -d " " -f2`;
+;; do echo \#:$i ;done
+
+
+(defpackage :raytrace
+  (:use :cl :vector :simplex-anneal)
+  (:export #:quadratic-roots
+	   #:ray-sphere-intersection-length
+	   #:direction
+	   #:ray-spheres-intersection
+	   #:sphere
+	   #:center
+	   #:radius
+	   #:make-sphere
+	   #:sphere-center
+	   #:sphere-radius
+	   #:ray-lost
+	   #:no-solution))
+
 (in-package :raytrace)
 
 (declaim (optimize (speed 2) (safety 3) (debug 3)))
 
+
 (define-condition one-solution () ())
+
+(define-condition ray-lost () ())
+
 (define-condition no-solution () ())
 
 (defun quadratic-roots (a b c)
   (declare (double-float a b c)
 	   (values double-float double-float &optional))
   "Find the two roots of ax^2+bx+c=0 and return them as multiple
-  values."
+  values. If no root exists the signal NO-SOLUTION is emitted."
+  (declare (double-float a b c)
+	   (values double-float &optional double-float))
   ;; see numerical recipes sec 5.6, p. 251 on how to avoid roundoff
   ;; error
   (let ((det2 (- (* b b) (* 4 a c))))
@@ -40,6 +71,24 @@
   (with-slots (center radius) sphere
     (format stream "#<sphere radius: ~4f center: <~4f ~4f ~4f>>" 
 	    radius (vec-x center) (vec-y center) (vec-z center))))
+    (unless (< 0d0 det2)
+      (signal 'no-solution))
+    (let* ((q (* .5d0 (+ b (* (signum b) (sqrt det2)))))
+	   (aa (abs a))
+	   (aq (abs q)))
+      (cond ((and (< aq 1d-12) (< aa 1d-12)) (signal 'no-solution))
+	    ((< aq 1d-12) (/ q a))
+	    ((< aa 1d-12) (/ c q))
+	    (t (values (/ q a) (/ c q)))))))
+
+#+nil ;; two different solutions
+(quadratic-roots 1d0 2d0 -3d0)
+#+nil ;; one solution
+(quadratic-roots 1d0 0d0 -2d0)
+#+nil ;; undefined result
+(handler-case 
+    (quadratic-roots 0d0 0d0 1d0)
+  (no-solution () 'no))
 
 (defmethod ray-sphere-intersection-length ((ray ray) center radius)
   (declare (vec center)
